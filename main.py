@@ -3,15 +3,25 @@ import numpy as np
 import os
 from openpyxl import load_workbook
 import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
 
-def process_excel_file(file_path, output_folder, stddev_folder):
+
+def process_excel_file(file_path, output_folder, stddev_folder, heatmap_folder):
+    # Extract base name and extension for file naming
+    base_name = os.path.basename(file_path)
+    name, ext = os.path.splitext(base_name)
+
     # Read all sheets into a dictionary of DataFrames
     sheets_dict = pd.read_excel(file_path, sheet_name=None)
     std_devs = {}
 
+    # Initialize the IterativeImputer
+    imputer = IterativeImputer(max_iter=10, random_state=0)
+
     # Iterate through each sheet and process the data
     for sheet_name, df in sheets_dict.items():
-
         # Replace 0 with NaN, except for the B2 cell
         df.replace(0, np.nan, inplace=True)
         df.iat[0, 1] = 0  # Restore B2 value
@@ -20,20 +30,41 @@ def process_excel_file(file_path, output_folder, stddev_folder):
         cols_to_drop = [col for col in df.columns if df[col].iloc[0] != 0 and df[col].iloc[1:].isna().all()]
         df.drop(columns=cols_to_drop, inplace=True)
 
-        # Fill missing values with the mean of the column
-        df.fillna(df.mean(), inplace=True)
+        # New logic to remove columns with 30% or more zeroes
+        threshold = 0.3  # 30%
+        for col in df.columns:
+            zero_count = df[col].isna().sum()
+            total_count = len(df[col])
+            zero_percentage = zero_count / total_count
+            if zero_percentage >= threshold:
+                df.drop(columns=[col], inplace=True)
 
-        # Exclude the first column and calculate standard deviation for each column
-        numeric_df = df.iloc[:, 1:].select_dtypes(include=[np.number])
+        # Convert column names to string
+        df.columns = df.columns.astype(str)
+
+        # Use IterativeImputer to fill missing values
+        numeric_df = df.select_dtypes(include=[np.number])
         if not numeric_df.empty:
-            std_devs[sheet_name] = numeric_df.std()
+            imputed_data = imputer.fit_transform(numeric_df)
+            df.loc[:, numeric_df.columns] = imputed_data
+
+            # Calculate standard deviation for each column
+            std_devs[sheet_name] = pd.DataFrame(imputed_data, columns=numeric_df.columns).std()
 
         # Update the dictionary with the imputed DataFrame
         sheets_dict[sheet_name] = df
 
+        # Generate heat map without annotations, excluding the first two columns
+        plt.figure(figsize=(10, 8))
+        if df.shape[1] > 2:  # Ensure there are more than 2 columns to plot
+            sns.heatmap(df.iloc[:, 2:].corr(), annot=False, cmap='coolwarm')
+            plt.title(f'Heat Map for {sheet_name}')
+            heatmap_output_file_name = f"{name}_{sheet_name}_heatmap.png"
+            heatmap_output_path = os.path.join(heatmap_folder, heatmap_output_file_name)
+            plt.savefig(heatmap_output_path)
+            plt.close()
+
     # Generate the output file path with "CLEANED(MI)" suffix
-    base_name = os.path.basename(file_path)
-    name, ext = os.path.splitext(base_name)
     output_file_name = f"{name}_CLEANED(MI){ext}"
     output_file_path = os.path.join(output_folder, output_file_name)
 
@@ -77,7 +108,8 @@ def process_excel_file(file_path, output_folder, stddev_folder):
             plt.savefig(graph_output_path)
             plt.close()
 
-def process_all_excel_files(input_folder, output_folder, stddev_folder):
+
+def process_all_excel_files(input_folder, output_folder, stddev_folder, heatmap_folder):
     # Ensure the output folder exists
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -86,19 +118,27 @@ def process_all_excel_files(input_folder, output_folder, stddev_folder):
     if not os.path.exists(stddev_folder):
         os.makedirs(stddev_folder)
 
+    # Ensure the heatmap folder exists
+    if not os.path.exists(heatmap_folder):
+        os.makedirs(heatmap_folder)
+
     # Iterate over all .xlsx files in the input folder
     for file_name in os.listdir(input_folder):
         if file_name.endswith('.xlsx'):
             file_path = os.path.join(input_folder, file_name)
-            process_excel_file(file_path, output_folder, stddev_folder)
+            process_excel_file(file_path, output_folder, stddev_folder, heatmap_folder)
+
 
 def main():
     input_folder = 'data'
     output_folder = 'cleaned_data'
     stddev_folder = 'standarddeviations'
+    heatmap_folder = 'heatmaps'
 
     # Process all files in the input folder
-    process_all_excel_files(input_folder, output_folder, stddev_folder)
+    process_all_excel_files(input_folder, output_folder, stddev_folder, heatmap_folder)
+
 
 if __name__ == '__main__':
     main()
+
