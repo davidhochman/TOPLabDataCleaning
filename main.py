@@ -2,11 +2,18 @@ import pandas as pd
 import numpy as np
 import os
 from openpyxl import load_workbook
-import matplotlib.pyplot as plt
-import seaborn as sns
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
+from scipy.stats import zscore
+from scipy.stats.mstats import winsorize
 
+def cap_outliers_zscore(df, threshold=3):
+    z_scores = np.abs(zscore(df, nan_policy='omit'))
+    df[(z_scores > threshold)] = np.nan
+    return df
+
+def winsorize_data(df, limits=[0.05, 0.05]):
+    return df.apply(lambda x: winsorize(x, limits=limits) if x.dtype.kind in 'biufc' else x, axis=0)
 
 def process_excel_file(file_path, output_folder, stddev_folder, heatmap_folder):
     # Extract base name and extension for file naming
@@ -17,8 +24,8 @@ def process_excel_file(file_path, output_folder, stddev_folder, heatmap_folder):
     sheets_dict = pd.read_excel(file_path, sheet_name=None)
     std_devs = {}
 
-    # Initialize the IterativeImputer
-    imputer = IterativeImputer(max_iter=10, random_state=0)
+    # Initialize the IterativeImputer with increased max_iter
+    imputer = IterativeImputer(max_iter=100, random_state=0)
 
     # Iterate through each sheet and process the data
     for sheet_name, df in sheets_dict.items():
@@ -48,24 +55,17 @@ def process_excel_file(file_path, output_folder, stddev_folder, heatmap_folder):
             imputed_data = imputer.fit_transform(numeric_df)
             df.loc[:, numeric_df.columns] = imputed_data
 
-            # Calculate standard deviation for each column
-            std_devs[sheet_name] = pd.DataFrame(imputed_data, columns=numeric_df.columns).std()
+            # Handle outliers using Z-Score method
+            capped_df = cap_outliers_zscore(pd.DataFrame(imputed_data, columns=numeric_df.columns))
+            # Apply Winsorization
+            winsorized_df = winsorize_data(capped_df)
+            std_devs[sheet_name] = winsorized_df.std()
 
-        # Update the dictionary with the imputed DataFrame
+        # Update the dictionary with the imputed and winsorized DataFrame
         sheets_dict[sheet_name] = df
 
-        # Generate heat map without annotations, excluding the first two columns
-        plt.figure(figsize=(10, 8))
-        if df.shape[1] > 2:  # Ensure there are more than 2 columns to plot
-            sns.heatmap(df.iloc[:, 2:].corr(), annot=False, cmap='coolwarm')
-            plt.title(f'Heat Map for {sheet_name}')
-            heatmap_output_file_name = f"{name}_{sheet_name}_heatmap.png"
-            heatmap_output_path = os.path.join(heatmap_folder, heatmap_output_file_name)
-            plt.savefig(heatmap_output_path)
-            plt.close()
-
-    # Generate the output file path with "CLEANED(MI)" suffix
-    output_file_name = f"{name}_CLEANED(MI){ext}"
+    # Generate the output file path with "CLEANED(EM)" suffix
+    output_file_name = f"{name}_CLEANED(EM){ext}"
     output_file_path = os.path.join(output_folder, output_file_name)
 
     # Save the cleaned data back to an Excel file
@@ -94,21 +94,6 @@ def process_excel_file(file_path, output_folder, stddev_folder, heatmap_folder):
     if not os.path.exists(stddev_folder):
         os.makedirs(stddev_folder)
 
-    # Generate standard deviation graph
-    for sheet_name, std_dev in std_devs.items():
-        if not std_dev.empty:
-            std_dev.plot(kind='bar', title=f'Standard Deviation for {sheet_name}')
-            plt.ylabel('Standard Deviation')
-            plt.xlabel('Columns')
-            plt.tight_layout()
-
-            # Save the graph
-            graph_output_file_name = f"{name}_{sheet_name}_std_dev.png"
-            graph_output_path = os.path.join(stddev_folder, graph_output_file_name)
-            plt.savefig(graph_output_path)
-            plt.close()
-
-
 def process_all_excel_files(input_folder, output_folder, stddev_folder, heatmap_folder):
     # Ensure the output folder exists
     if not os.path.exists(output_folder):
@@ -128,7 +113,6 @@ def process_all_excel_files(input_folder, output_folder, stddev_folder, heatmap_
             file_path = os.path.join(input_folder, file_name)
             process_excel_file(file_path, output_folder, stddev_folder, heatmap_folder)
 
-
 def main():
     input_folder = 'data'
     output_folder = 'cleaned_data'
@@ -138,7 +122,5 @@ def main():
     # Process all files in the input folder
     process_all_excel_files(input_folder, output_folder, stddev_folder, heatmap_folder)
 
-
 if __name__ == '__main__':
     main()
-
