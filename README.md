@@ -42,7 +42,6 @@ df_custom_limits = winsorize_data(df, limits=[0.01, 0.01])  # More aggressive wi
 3. process_excel_file(file_path, output_folder, stddev_folder, heatmap_folder)
 Description: Processes a single Excel file by imputing missing values, handling outliers, and saving the cleaned data to a new Excel file.
 Example Usage:
-# Define paths
 ```
 file_path = 'C:\\path_to_excel\\sample_data.xlsx'
 output_folder = 'C:\\path_to_output\\cleaned_data'
