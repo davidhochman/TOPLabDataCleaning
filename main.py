@@ -46,6 +46,8 @@ def process_excel_file(file_path, output_folder, stddev_folder, heatmap_folder):
             if zero_percentage >= threshold:
                 df.drop(columns=[col], inplace=True)
 
+        #make secondary spreadsheet without imputation
+
         # Convert column names to string
         df.columns = df.columns.astype(str)
 
