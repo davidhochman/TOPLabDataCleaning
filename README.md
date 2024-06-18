@@ -15,6 +15,7 @@ To reference the code:
 By using IterativeImputer, the code leverages the EM method to handle missing data, ensuring a more robust and statistically sound imputation process compared to simpler methods like mean or median imputation.
 
   This Python script is designed to preprocess and clean a dataset of sleep activity from Fitbit users, stored in Excel files. It automates the process of handling multiple sheets within each Excel file using Iterative Imputer which imputes missing values by iteratively modeling each feature with missing entries as a function of other features, using a sequential, cyclic approach.
+  
   The script begins by reading all sheets from an input Excel file into a dictionary of DataFrames. It replaces zero values with NaN and restores the 0th participant. It then removes columns that have more than 70% zeros, and applies the model “IterativeImputer” to fill missing values. It then caps values based on Z-scores to reduce outliers and applies winsorization (which limits extreme values), to normalize the data distribution.The script writes the cleaned data back to Excel, adds “CLEANED(EM)” to the title, and keeps everything else the same. It formats the content, and saves it in a specific folder.
 
 Example Usage:
